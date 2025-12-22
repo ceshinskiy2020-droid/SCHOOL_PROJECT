@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход</title>
+</head>
+<body>
+    <h1>Вход</h1>
+
+    {% if get_flashed_messages() %}
+        <div style="color: red; margin: 10px 0;">
+            {{ get_flashed_messages()[0] }}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="/login">
+        <div>
+            <label>Логин:</label><br>
+            <input type="text" name="username" required>
+        </div>
+        <br>
+        <div>
+            <label>Пароль:</label><br>
+            <input type="password" name="password" required>
+        </div>
+        <br>
+        <button type="submit">Войти</button>
+    </form>
+
+    <p>Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Регистрация</title>
+</head>
+<body>
+    <h1>Регистрация</h1>
+
+    {% if get_flashed_messages() %}
+        <div style="color: red; margin: 10px 0;">
+            {{ get_flashed_messages()[0] }}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="/register">
+        <div>
+            <label>Логин:</label><br>
+            <input type="text" name="username" required>
+        </div>
+        <br>
+        <div>
+            <label>Пароль:</label><br>
+            <input type="password" name="password" required>
+        </div>
+        <br>
+        <div>
+            <label>Имя:</label><br>
+            <input type="text" name="first_name" required>
+        </div>
+        <br>
+        <div>
+            <label>Фамилия:</label><br>
+            <input type="text" name="last_name" required>
+        </div>
+        <br>
+        <div>
+            <label>Класс:</label><br>
+            <input type="text" name="class" required>
+        </div>
+        <br>
+        <button type="submit">Зарегистрироваться</button>
+    </form>
+
+    <p>Уже есть аккаунт? <a href="/login">Войти</a></p>
+</body>
+</html>

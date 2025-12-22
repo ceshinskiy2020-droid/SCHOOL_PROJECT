@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Выбор сайта</title>
+</head>
+<body>
+    <h1>Выбор сайта</h1>
+
+    <p>
+        Пользователь: {{ session['first_name'] }} {{ session['last_name'] }}
+        ({{ session['class'] }})
+    </p>
+
+    <p><a href="/logout">Выйти</a></p>
+
+    {% if get_flashed_messages() %}
+        <div style="color: red; margin: 10px 0;">
+            {{ get_flashed_messages()[0] }}
+        </div>
+    {% endif %}
+
+    <h2>Выберите сайт:</h2>
+
+    <ul>
+        {% for site in sites %}
+        <li>
+            <strong>Сайт {{ site.site_number }}</strong>: {{ site.site_name }}
+            <br>
+            <a href="/start_session/{{ site.site_number }}">Начать сессию</a>
+        </li>
+        <br>
+        {% endfor %}
+    </ul>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Завершение сеанса</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .session-info {
+            font-size: 1.1em;
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #007BFF;
+        }
+        button {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #c82333; }
+        .logout-btn {
+            background: #6c757d;
+            margin-left: 10px;
+        }
+        .logout-btn:hover { background: #545b62; }
+    </style>
+</head>
+<body>
+    <h1>Сеанс активен</h1>
+
+
+    <p>Нажмите кнопку ниже, чтобы завершить сеанс.</p>
+
+    <form action="{{ url_for('end_session', user_id=user_id) }}" method="POST" style="display:inline;">
+        <button type="submit">Закончить сеанс</button>
+    </form>
+
+
+</body>
+</html>
