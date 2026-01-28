@@ -2,31 +2,26 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход</title>
-</head>
-<body>
-    <h1>Вход</h1>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+        }
 
-    {% if get_flashed_messages() %}
-        <div style="color: red; margin: 10px 0;">
-            {{ get_flashed_messages()[0] }}
-        </div>
-    {% endif %}
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
-    <form method="POST" action="/login">
-        <div>
-            <label>Логин:</label><br>
-            <input type="text" name="username" required>
-        </div>
-        <br>
-        <div>
-            <label>Пароль:</label><br>
-            <input type="password" name="password" required>
-        </div>
-        <br>
-        <button type="submit">Войти</button>
-    </form>
-
-    <p>Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
-</body>
-</html>
+        .auth-container {
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #000000;
+            padding
