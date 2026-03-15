@@ -1,127 +1,237 @@
 {% extends "base.html" %}
 
-{% block title %}Текущая сессия{% endblock %}
-
-{% block extra_css %}
-<style>
-    .session-status {
-        font-size: 14px;
-        padding: 4px 12px;
-        background-color: #000000;
-        color: #ffffff;
-        display: inline-block;
-        margin-bottom: 20px;
-    }
-    
-    .info-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20px;
-        margin: 30px 0;
-    }
-    
-    .info-item {
-        border: 1px solid #000000;
-        padding: 20px;
-    }
-    
-    .info-label {
-        font-size: 12px;
-        color: #666666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 5px;
-    }
-    
-    .info-value {
-        font-size: 18px;
-        font-weight: 600;
-    }
-    
-    .timer {
-        font-size: 48px;
-        font-weight: 700;
-        text-align: center;
-        margin: 30px 0;
-        font-family: 'Courier New', monospace;
-    }
-    
-    @media (max-width: 768px) {
-        .info-grid {
-            grid-template-columns: 1fr;
-        }
-        
-        .timer {
-            font-size: 36px;
-        }
-    }
-</style>
-{% endblock %}
+{% block title %}Текущая сессия - Учет сессий{% endblock %}
 
 {% block content %}
-<div class="text-center mb-4">
-    <div class="session-status">АКТИВНАЯ СЕССИЯ</div>
-    <h1 style="font-size: 24px; font-weight: 600;">ТЕКУЩАЯ СЕССИЯ</h1>
-</div>
+<div class="session-container">
+    <div class="session-header">
+        <h1>ТЕКУЩАЯ СЕССИЯ</h1>
+        <div class="status-badge active">АКТИВНА</div>
+    </div>
 
-<div class="card">
-    <div class="info-grid">
-        <div class="info-item">
-            <div class="info-label">Рабочее место</div>
-            <div class="info-value">{{ session_data[1] }}</div>
+    <div class="session-card">
+        <div class="session-info">
+            <div class="info-row">
+                <div class="info-label">ПОЛЬЗОВАТЕЛЬ</div>
+                <div class="info-value">{{ session_data.first_name }} {{ session_data.last_name }}</div>
+            </div>
+
+            <div class="info-row">
+                <div class="info-label">КЛАСС</div>
+                <div class="info-value">{{ session_data.class }}</div>
+            </div>
+
+            <div class="info-row">
+                <div class="info-label">НОМЕР КНОПКИ</div>
+                <div class="info-value button-highlight">{{ session_data.button_number }}</div>
+            </div>
+
+            <div class="info-row">
+                <div class="info-label">ВРЕМЯ НАЧАЛА</div>
+                <div class="info-value">{{ session_data.start_time }}</div>
+            </div>
         </div>
-        
-        <div class="info-item">
-            <div class="info-label">Начало сессии</div>
-            <div class="info-value">{{ session_data[2][:16].replace('T', ' ') }}</div>
+
+        <div class="timer-container">
+            <div class="timer-label">ДЛИТЕЛЬНОСТЬ</div>
+            <div class="timer" id="timer">00:00:00</div>
         </div>
-        
-        <div class="info-item">
-            <div class="info-label">Пользователь</div>
-            <div class="info-value">{{ session_data[3] }} {{ session_data[4] }}</div>
-        </div>
-        
-        <div class="info-item">
-            <div class="info-label">Класс</div>
-            <div class="info-value">{{ session_data[5] }}</div>
+
+        <div class="action-buttons">
+            <form action="{{ url_for('end_session') }}" method="POST" style="flex: 1;">
+                <button type="submit" class="btn btn-warning btn-block" onclick="return confirm('Завершить сессию?')">
+                    ЗАВЕРШИТЬ СЕССИЮ
+                </button>
+            </form>
+            <a href="{{ url_for('select_button') }}" class="btn btn-secondary">НАЗАД</a>
         </div>
     </div>
-    
-    <div class="timer" id="timer">00:00:00</div>
-    
-    <div class="text-center">
-        <a href="{{ url_for('end_session') }}" 
-           class="btn btn-danger" 
-           style="padding: 15px 40px; font-size: 16px;"
-           onclick="return confirm('Завершить текущую сессию?')">
-            ЗАВЕРШИТЬ СЕССИЮ
-        </a>
-    </div>
-</div>
-
-<div class="text-center mt-3">
-    <a href="{{ url_for('select_button') }}" class="btn">Вернуться к выбору места</a>
 </div>
 
 <script>
-    // Таймер длительности сессии
+    const startTime = new Date("{{ session_data.start_time.replace(' ', 'T') }}");
+
     function updateTimer() {
-        const startTime = new Date("{{ session_data[2] }}");
         const now = new Date();
-        const diffMs = now - startTime;
-        
-        const hours = Math.floor(diffMs / 3600000);
-        const minutes = Math.floor((diffMs % 3600000) / 60000);
-        const seconds = Math.floor((diffMs % 60000) / 1000);
-        
-        document.getElementById('timer').textContent = 
-            `${hours.toString().padStart(2, '0')}:` +
-            `${minutes.toString().padStart(2, '0')}:` +
-            `${seconds.toString().padStart(2, '0')}`;
+        const diff = now - startTime;
+
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+
+        document.getElementById('timer').textContent =
+            `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
-    
-    // Обновляем таймер каждую секунду
+
     updateTimer();
     setInterval(updateTimer, 1000);
 </script>
+
+<style>
+    .session-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .session-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .session-header h1 {
+        color: #fff;
+        font-size: 24px;
+        letter-spacing: 3px;
+        font-weight: normal;
+    }
+
+    .status-badge {
+        padding: 8px 16px;
+        font-size: 12px;
+        letter-spacing: 2px;
+        border: 1px solid;
+    }
+
+    .status-badge.active {
+        background: #1a1a1a;
+        border-color: #666;
+        color: #fff;
+    }
+
+    .session-card {
+        background: #111;
+        border: 1px solid #333;
+        padding: 40px;
+    }
+
+    .session-info {
+        margin-bottom: 40px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 15px 0;
+        border-bottom: 1px solid #222;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: #666;
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+
+    .info-value {
+        color: #fff;
+        font-size: 16px;
+        letter-spacing: 1px;
+    }
+
+    .button-highlight {
+        background: #1a1a1a;
+        padding: 5px 15px;
+        border: 1px solid #444;
+        font-weight: bold;
+    }
+
+    .timer-container {
+        background: #000;
+        border: 1px solid #333;
+        padding: 30px;
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .timer-label {
+        color: #666;
+        font-size: 12px;
+        letter-spacing: 3px;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+    }
+
+    .timer {
+        color: #fff;
+        font-size: 48px;
+        font-family: monospace;
+        letter-spacing: 5px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+    }
+
+    .btn {
+        padding: 15px 25px;
+        border: none;
+        font-size: 14px;
+        letter-spacing: 2px;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-decoration: none;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .btn-block {
+        width: 100%;
+    }
+
+    .btn-warning {
+        background: #333;
+        color: #fff;
+        border: 1px solid #666;
+    }
+
+    .btn-warning:hover {
+        background: #444;
+        border-color: #888;
+    }
+
+    .btn-secondary {
+        background: #1a1a1a;
+        color: #999;
+        border: 1px solid #333;
+        min-width: 120px;
+    }
+
+    .btn-secondary:hover {
+        background: #222;
+        color: #fff;
+    }
+
+    @media (max-width: 768px) {
+        .session-header {
+            flex-direction: column;
+            gap: 15px;
+            text-align: center;
+        }
+
+        .session-card {
+            padding: 25px;
+        }
+
+        .info-row {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .timer {
+            font-size: 36px;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+    }
+</style>
 {% endblock %}
