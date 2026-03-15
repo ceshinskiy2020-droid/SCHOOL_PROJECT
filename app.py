@@ -5,23 +5,21 @@ import logging
 import hashlib
 import os
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'ВАШ_УНИКАЛЬНЫЙ_СЕКРЕТНЫЙ_КЛЮЧ'
+app.secret_key = 'ВАШ_УНИКАЛЬНЫЙ_СЕКРЕТНЫЙ_КЛЮЧ_ИЗМЕНИТЕ_ЭТО'
 
 # UTC+3
 UTC_PLUS_3 = timezone(timedelta(hours=3))
 
 
 def init_db():
-    """Инициализация базы данных."""
+    """Инициализация и обновление базы данных."""
     conn = sqlite3.connect('sessions.db')
     cursor = conn.cursor()
 
-    # Таблица пользователей
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,16 +31,29 @@ def init_db():
     )
     ''')
 
-    # Таблица сессий
+    # Таблица сессий - создаем без feedback и rating
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         button_number TEXT,
         start_time TEXT NOT NULL,
-        end_time TEXT
+        end_time TEXT,
+        FOREIGN KEY (user_id) REFERENCES users (id)
     )
     ''')
+
+    try:
+        cursor.execute('SELECT feedback FROM sessions LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE sessions ADD COLUMN feedback TEXT')
+        logger.info("Добавлена колонка feedback в таблицу sessions")
+
+    try:
+        cursor.execute('SELECT rating FROM sessions LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE sessions ADD COLUMN rating INTEGER')
+        logger.info("Добавлена колонка rating в таблицу sessions")
 
     conn.commit()
     conn.close()
@@ -54,7 +65,6 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-# Контекстный процессор для добавления текущего года во все шаблоны
 @app.context_processor
 def inject_current_year():
     return {'current_year': datetime.now().year}
@@ -161,7 +171,6 @@ def select_button():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # Проверяем, есть ли активная сессия
     conn = sqlite3.connect('sessions.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -182,7 +191,6 @@ def start_session(button_number):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # Проверяем, нет ли уже активной сессии
     conn = sqlite3.connect('sessions.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -196,7 +204,6 @@ def start_session(button_number):
         flash('У вас уже есть активная сессия.')
         return redirect(url_for('current_session'))
 
-    # Создаем новую сессию
     start_time = datetime.now(UTC_PLUS_3).isoformat()
     try:
         cursor.execute('''
@@ -206,11 +213,11 @@ def start_session(button_number):
         session_id = cursor.lastrowid
         conn.commit()
 
-        # Сохраняем ID сессии в сессии Flask
         session['session_id'] = session_id
         session['button_number'] = button_number
 
         logger.info(f"Начата сессия {session_id} с кнопкой {button_number}")
+        flash('Сессия успешно начата!')
 
     except sqlite3.Error as e:
         flash(f'Ошибка при создании сессии: {str(e)}')
@@ -230,12 +237,12 @@ def current_session():
     conn = sqlite3.connect('sessions.db')
     cursor = conn.cursor()
     cursor.execute('''
-    SELECT s.id, s.button_number, s.start_time, u.first_name, u.last_name, u.class
-    FROM sessions s
-    JOIN users u ON s.user_id = u.id
-    WHERE s.user_id = ? AND s.end_time IS NULL
-    ORDER BY s.start_time DESC
-    LIMIT 1
+        SELECT s.id, s.button_number, s.start_time, u.first_name, u.last_name, u.class
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.user_id = ? AND s.end_time IS NULL
+        ORDER BY s.start_time DESC
+        LIMIT 1
     ''', (session['user_id'],))
 
     current_session_data = cursor.fetchone()
@@ -244,7 +251,33 @@ def current_session():
     if not current_session_data:
         return redirect(url_for('select_button'))
 
-    return render_template('current_session.html', session_data=current_session_data)
+    # ИСПРАВЛЕНО: Правильная обработка времени
+    start_str = current_session_data[2]
+    try:
+        # Пробуем разные форматы ISO
+        if 'Z' in start_str:
+            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+        elif '+' in start_str:
+            start_dt = datetime.fromisoformat(start_str)
+        else:
+            # Если нет timezone info, считаем локальным UTC+3
+            start_dt = datetime.fromisoformat(start_str)
+            start_dt = start_dt.replace(tzinfo=UTC_PLUS_3)
+        formatted_start = start_dt.strftime('%d.%m.%Y %H:%M')
+    except (ValueError, TypeError):
+        # Fallback для поврежденных данных
+        formatted_start = start_str[:16] if start_str else 'Неизвестно'
+
+    session_data = {
+        'id': current_session_data[0],
+        'button_number': current_session_data[1],
+        'start_time': formatted_start,  # Теперь всегда корректная строка
+        'first_name': current_session_data[3],
+        'last_name': current_session_data[4],
+        'class': current_session_data[5]
+    }
+
+    return render_template('current_session.html', session_data=session_data)
 
 
 @app.route('/end_session', methods=['GET', 'POST'])
@@ -258,19 +291,23 @@ def end_session():
 
     try:
         cursor.execute('''
-        UPDATE sessions SET end_time = ? 
-        WHERE user_id = ? AND end_time IS NULL
-        ''', (end_time, session['user_id']))
-        conn.commit()
+            SELECT id FROM sessions 
+            WHERE user_id = ? AND end_time IS NULL
+        ''', (session['user_id'],))
+        active_session = cursor.fetchone()
 
-        # Очищаем данные сессии
-        if 'session_id' in session:
-            session.pop('session_id')
-        if 'button_number' in session:
-            session.pop('button_number')
-
-        logger.info(f"Сессия пользователя {session['user_id']} завершена")
-        flash('Сессия завершена.')
+        if active_session:
+            cursor.execute('''
+                UPDATE sessions SET end_time = ? 
+                WHERE id = ?
+            ''', (end_time, active_session[0]))
+            conn.commit()
+            logger.info(f"Сессия {active_session[0]} пользователя {session['user_id']} завершена")
+            flash('Сессия завершена!')
+        else:
+            flash('Активная сессия не найдена.')
+            conn.close()
+            return redirect(url_for('select_button'))
 
     except sqlite3.Error as e:
         flash(f'Ошибка при завершении сессии: {str(e)}')
@@ -278,7 +315,57 @@ def end_session():
     finally:
         conn.close()
 
-    return redirect(url_for('select_button'))
+    session.pop('session_id', None)
+    session.pop('button_number', None)
+
+    return redirect(url_for('feedback'))
+
+
+@app.route('/feedback', methods=['GET', 'POST'])
+def feedback():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        rating = request.form.get('rating')
+        feedback_text = request.form.get('feedback', '').strip()
+
+        if not rating or not rating.isdigit() or not (1 <= int(rating) <= 5):
+            flash('Пожалуйста, оцените сеанс от 1 до 5 звёзд.')
+            return redirect(url_for('feedback'))
+
+        rating = int(rating)
+
+        conn = sqlite3.connect('sessions.db')
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute('''
+                UPDATE sessions
+                SET feedback = ?, rating = ?
+                WHERE user_id = ? AND end_time IS NOT NULL
+                ORDER BY start_time DESC
+                LIMIT 1
+            ''', (feedback_text, rating, session['user_id']))
+
+            if cursor.rowcount > 0:
+                conn.commit()
+                logger.info(f"Отзыв сохранён для пользователя {session['user_id']}: рейтинг={rating}")
+                flash('Спасибо за ваш отзыв!')
+            else:
+                flash('Сессия для отзыва не найдена.')
+
+            return redirect(url_for('history'))
+
+        except sqlite3.Error as e:
+            flash(f'Ошибка при сохранении отзыва: {str(e)}')
+            logger.error(f"Ошибка при сохранении отзыва: {e}")
+        finally:
+            conn.close()
+
+        return redirect(url_for('current_session'))
+
+    return render_template('feedback.html')  # Используем feedback.html
 
 
 @app.route('/history')
@@ -288,56 +375,141 @@ def history():
 
     conn = sqlite3.connect('sessions.db')
     cursor = conn.cursor()
+
+    # Всегда запрашиваем с COALESCE для безопасности
     cursor.execute('''
-    SELECT button_number, start_time, end_time 
-    FROM sessions 
-    WHERE user_id = ? 
-    ORDER BY start_time DESC
-    LIMIT 20
+        SELECT button_number, 
+               start_time, 
+               end_time, 
+               COALESCE(feedback, '') as feedback,
+               COALESCE(rating, 0) as rating
+        FROM sessions 
+        WHERE user_id = ? 
+        ORDER BY start_time DESC
+        LIMIT 20
     ''', (session['user_id'],))
 
-    sessions_history = cursor.fetchall()
+    sessions = cursor.fetchall()
     conn.close()
 
-    # Форматируем даты
     sessions_processed = []
-    for sess in sessions_history:
-        start_str = sess[1]
-        end_str = sess[2]
+    for sess in sessions:
+        # Гарантированно 5 элементов
+        button = sess[0] or ''
+        start_str = sess[1] or ''
+        end_str = sess[2] or ''
+        feedback_text = sess[3] or ''
+        rating = sess[4] or 0
 
+        # Обработка времени начала
         if start_str:
             try:
-                start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                if 'Z' in start_str:
+                    start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                elif '+' in start_str:
+                    start_dt = datetime.fromisoformat(start_str)
+                else:
+                    start_dt = datetime.fromisoformat(start_str)
+                    start_dt = start_dt.replace(tzinfo=UTC_PLUS_3)
                 start_formatted = start_dt.strftime('%d.%m.%Y %H:%M')
-            except:
+            except (ValueError, TypeError):
                 start_formatted = start_str[:16]
         else:
-            start_formatted = ''
+            start_formatted = 'Неизвестно'
 
+        # Обработка времени окончания и длительности
+        duration = None
         if end_str:
             try:
-                end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                if 'Z' in end_str:
+                    end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                elif '+' in end_str:
+                    end_dt = datetime.fromisoformat(end_str)
+                else:
+                    end_dt = datetime.fromisoformat(end_str)
+                    end_dt = end_dt.replace(tzinfo=UTC_PLUS_3)
                 end_formatted = end_dt.strftime('%d.%m.%Y %H:%M')
-                duration = (end_dt - start_dt).seconds // 60
-            except:
+
+                # Вычисляем длительность только если есть start_time
+                if start_str:
+                    if 'Z' in start_str:
+                        start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                    else:
+                        start_dt = datetime.fromisoformat(start_str)
+                        start_dt = start_dt.replace(tzinfo=UTC_PLUS_3)
+                    duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
+                    duration = f"{duration_minutes} мин"
+            except (ValueError, TypeError):
                 end_formatted = end_str[:16]
                 duration = None
         else:
-            end_formatted = None
+            end_formatted = 'В процессе'
             duration = None
 
-        sessions_processed.append((sess[0], start_formatted, end_formatted, duration))
+        # ИСПРАВЛЕНО: rating всегда строка для шаблона
+        rating_display = str(rating) if rating and rating > 0 else 'Не оценено'
+        feedback_display = feedback_text if feedback_text.strip() else 'Нет отзыва'
+
+        sessions_processed.append({
+            'button': button,
+            'start': start_formatted,
+            'end': end_formatted,
+            'duration': duration or 'Неизвестно',
+            'feedback': feedback_display,
+            'rating': rating_display
+        })
 
     return render_template('history.html', sessions=sessions_processed)
 
+@app.route('/admin')
+def admin():
+    # Простая проверка на админа (можно расширить)
+    if 'user_id' not in session or session.get('username') != 'admin':
+        flash('Доступ запрещен.')
+        return redirect(url_for('select_button'))
+
+    conn = sqlite3.connect('sessions.db')
+    cursor = conn.cursor()
+
+    # Общая статистика
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute('SELECT COUNT(*) FROM sessions')
+    total_sessions = cursor.fetchone()[0]
+
+    cursor.execute('SELECT COUNT(*) FROM sessions WHERE end_time IS NULL')
+    active_sessions = cursor.fetchone()[0]
+
+    # Проверяем наличие колонки rating
+    cursor.execute("PRAGMA table_info(sessions)")
+    columns = [column[1] for column in cursor.fetchall()]
+
+    if 'rating' in columns:
+        cursor.execute('SELECT AVG(rating) FROM sessions WHERE rating IS NOT NULL')
+        avg_rating = cursor.fetchone()[0]
+        if avg_rating:
+            avg_rating = round(avg_rating, 1)
+        else:
+            avg_rating = 0
+    else:
+        avg_rating = 0
+
+    conn.close()
+
+    stats = {
+        'total_users': total_users,
+        'total_sessions': total_sessions,
+        'active_sessions': active_sessions,
+        'avg_rating': avg_rating
+    }
+
+    return render_template('admin.html', stats=stats)
+
 
 if __name__ == '__main__':
-    # Удаляем старую базу данных при первом запуске
-    if os.path.exists('sessions.db'):
-        os.remove('sessions.db')
-        print("Старая база данных удалена. Создаем новую...")
-
     init_db()
+
     print("=" * 50)
     print("СИСТЕМА УЧЕТА УЧЕБНЫХ СЕССИЙ")
     print("=" * 50)
@@ -346,4 +518,3 @@ if __name__ == '__main__':
     print("Для регистрации: http://localhost:5000/register")
     print("=" * 50)
     app.run(debug=True, port=5000)
-
